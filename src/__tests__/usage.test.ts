@@ -46,7 +46,7 @@ describe("Codex usage", () => {
     });
   });
 
-  test("can bypass inconsistent upstream caches without changing the usage path", async () => {
+  test("can independently sample the same usage path", async () => {
     const root = await mkdtemp(join(tmpdir(), "op-usage-"));
     const authFile = join(root, "auth.json");
     await writeFile(authFile, JSON.stringify({ tokens: { access_token: "secret", account_id: "account-1" } }));

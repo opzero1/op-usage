@@ -12,16 +12,19 @@ export function formatUsage(usage: CodexUsage): string {
   return `5h ${remaining(usage.fiveHour.usedPercent)}% left · wk ${remaining(usage.weekly.usedPercent)}% left`;
 }
 
-function newestWindow(current: CodexUsage["fiveHour"], next: CodexUsage["fiveHour"]) {
-  if (current.resetsAt !== undefined && next.resetsAt !== undefined && next.resetsAt < current.resetsAt) return current;
-  return next;
+function windowKey(usage: CodexUsage): string {
+  const minute = (value?: number) => (value === undefined ? "?" : Math.floor(value / 60));
+  return `${minute(usage.fiveHour.resetsAt)}/${minute(usage.weekly.resetsAt)}`;
 }
 
-export function mergeUsage(current: CodexUsage, next: CodexUsage): CodexUsage {
-  return {
-    fiveHour: newestWindow(current.fiveHour, next.fiveHour),
-    weekly: newestWindow(current.weekly, next.weekly),
-  };
+export function selectConsensusUsage(samples: CodexUsage[]): CodexUsage | undefined {
+  const groups = new Map<string, { count: number; usage: CodexUsage }>();
+  for (const usage of samples) {
+    const key = windowKey(usage);
+    const group = groups.get(key);
+    groups.set(key, { count: (group?.count ?? 0) + 1, usage });
+  }
+  return [...groups.values()].sort((a, b) => b.count - a.count)[0]?.usage;
 }
 
 export async function installUsagePlugin(api: TuiPluginApi, options: InstallOptions = {}): Promise<void> {
@@ -29,23 +32,26 @@ export async function installUsagePlugin(api: TuiPluginApi, options: InstallOpti
   const load = options.load ?? (() => loadCodexUsage({ cacheBuster: crypto.randomUUID() }));
   let disposed = false;
 
-  const refresh = async (sampleLimit = 1) => {
-    let next: CodexUsage | undefined;
-    let unavailable = false;
-    const results = await Promise.allSettled(Array.from({ length: sampleLimit }, () => load()));
+  const sample = async (count: number) => {
+    const results = await Promise.allSettled(Array.from({ length: count }, () => load()));
+    return {
+      unavailable: results.some((result) => result.status === "fulfilled" && !result.value),
+      values: results.flatMap((result) =>
+        result.status === "fulfilled" && result.value ? [result.value] : [],
+      ),
+    };
+  };
 
-    for (const result of results) {
-      if (result.status === "rejected") continue;
-      if (!result.value) {
-        unavailable = true;
-        continue;
-      }
-      next = next ? mergeUsage(next, result.value) : result.value;
+  const refresh = async (initial = false) => {
+    const result = await sample(initial ? 5 : 1);
+    const current = usage();
+    if (!initial && current && result.values[0] && windowKey(current) !== windowKey(result.values[0])) {
+      result.values.push(...(await sample(4)).values);
     }
 
-    if (disposed) return;
-    if (next) setUsage((current) => (current ? mergeUsage(current, next) : next));
-    else if (unavailable) setUsage(undefined);
+    const next = selectConsensusUsage(result.values);
+    if (!disposed && next) setUsage(next);
+    else if (!disposed && result.unavailable) setUsage(undefined);
   };
 
   const Usage = () => (
@@ -73,7 +79,5 @@ export async function installUsagePlugin(api: TuiPluginApi, options: InstallOpti
     clearInterval(timer);
   });
 
-  // The upstream endpoint can alternate between an older and newer reset
-  // window. Sample at startup, then retain the one with later resets.
-  void refresh(options.load ? 1 : 10);
+  void refresh(!options.load);
 }

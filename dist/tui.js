@@ -97,16 +97,21 @@ function formatUsage(usage) {
   const remaining = (used) => Math.round(Math.max(0, Math.min(100, 100 - used)));
   return `5h ${remaining(usage.fiveHour.usedPercent)}% left \xB7 wk ${remaining(usage.weekly.usedPercent)}% left`;
 }
-function newestWindow(current, next) {
-  if (current.resetsAt !== undefined && next.resetsAt !== undefined && next.resetsAt < current.resetsAt)
-    return current;
-  return next;
+function windowKey(usage) {
+  const minute = (value) => value === undefined ? "?" : Math.floor(value / 60);
+  return `${minute(usage.fiveHour.resetsAt)}/${minute(usage.weekly.resetsAt)}`;
 }
-function mergeUsage(current, next) {
-  return {
-    fiveHour: newestWindow(current.fiveHour, next.fiveHour),
-    weekly: newestWindow(current.weekly, next.weekly)
-  };
+function selectConsensusUsage(samples) {
+  const groups = new Map;
+  for (const usage of samples) {
+    const key = windowKey(usage);
+    const group = groups.get(key);
+    groups.set(key, {
+      count: (group?.count ?? 0) + 1,
+      usage
+    });
+  }
+  return [...groups.values()].sort((a, b) => b.count - a.count)[0]?.usage;
 }
 async function installUsagePlugin(api, options = {}) {
   const [usage, setUsage] = createSignal();
@@ -114,26 +119,25 @@ async function installUsagePlugin(api, options = {}) {
     cacheBuster: crypto.randomUUID()
   }));
   let disposed = false;
-  const refresh = async (sampleLimit = 1) => {
-    let next;
-    let unavailable = false;
+  const sample = async (count) => {
     const results = await Promise.allSettled(Array.from({
-      length: sampleLimit
+      length: count
     }, () => load()));
-    for (const result of results) {
-      if (result.status === "rejected")
-        continue;
-      if (!result.value) {
-        unavailable = true;
-        continue;
-      }
-      next = next ? mergeUsage(next, result.value) : result.value;
+    return {
+      unavailable: results.some((result) => result.status === "fulfilled" && !result.value),
+      values: results.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : [])
+    };
+  };
+  const refresh = async (initial = false) => {
+    const result = await sample(initial ? 5 : 1);
+    const current = usage();
+    if (!initial && current && result.values[0] && windowKey(current) !== windowKey(result.values[0])) {
+      result.values.push(...(await sample(4)).values);
     }
-    if (disposed)
-      return;
-    if (next)
-      setUsage((current) => current ? mergeUsage(current, next) : next);
-    else if (unavailable)
+    const next = selectConsensusUsage(result.values);
+    if (!disposed && next)
+      setUsage(next);
+    else if (!disposed && result.unavailable)
       setUsage(undefined);
   };
   const Usage = () => _$createComponent(Show, {
@@ -165,7 +169,7 @@ async function installUsagePlugin(api, options = {}) {
     disposed = true;
     clearInterval(timer);
   });
-  refresh(options.load ? 1 : 10);
+  refresh(!options.load);
 }
 
 // src/tui.entry.ts

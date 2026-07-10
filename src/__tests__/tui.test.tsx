@@ -2,7 +2,7 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
 import { testRender, type JSX } from "@opentui/solid";
 import { describe, expect, test } from "bun:test";
 import type { CodexUsage } from "../usage.js";
-import { formatUsage, installUsagePlugin, mergeUsage } from "../tui.js";
+import { formatUsage, installUsagePlugin, selectConsensusUsage } from "../tui.js";
 
 const usage: CodexUsage = {
   fiveHour: { usedPercent: 42.4 },
@@ -38,18 +38,17 @@ describe("usage TUI plugin", () => {
     expect(formatUsage(usage)).toBe("5h 58% left · wk 95% left");
   });
 
-  test("keeps the snapshot with the newest reset timestamps", () => {
-    const stale: CodexUsage = {
-      fiveHour: { usedPercent: 29, resetsAt: 100 },
-      weekly: { usedPercent: 15, resetsAt: 1_000 },
+  test("selects the majority reset window instead of earlier or later timestamps", () => {
+    const website: CodexUsage = {
+      fiveHour: { usedPercent: 37, resetsAt: 1_783_693_896 },
+      weekly: { usedPercent: 17, resetsAt: 1_784_200_309 },
     };
-    const current: CodexUsage = {
-      fiveHour: { usedPercent: 1, resetsAt: 200 },
-      weekly: { usedPercent: 0, resetsAt: 2_000 },
+    const alternate: CodexUsage = {
+      fiveHour: { usedPercent: 1, resetsAt: 1_783_695_278 },
+      weekly: { usedPercent: 0, resetsAt: 1_784_214_046 },
     };
 
-    expect(mergeUsage(stale, current)).toEqual(current);
-    expect(mergeUsage(current, stale)).toEqual(current);
+    expect(selectConsensusUsage([website, alternate, website, website, alternate])).toEqual(website);
   });
 
   test("registers usage beside both prompt surfaces", async () => {

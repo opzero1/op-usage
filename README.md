@@ -10,7 +10,7 @@ An unobtrusive Codex usage monitor for OpenCode.
 
 The values are the percentage remaining in Codex's rolling 5-hour primary window and weekly secondary window, matching ChatGPT's usage page. They refresh once per minute. Missing auth hides the indicator; network, auth, and malformed-response errors keep the last good reading and never show a toast or interrupt the prompt.
 
-The ChatGPT usage endpoint can briefly return stale snapshots from an older reset window. The plugin samples it on startup and ignores later responses with older reset timestamps, preventing the displayed limit from jumping between ledgers.
+The ChatGPT endpoint can occasionally return a different reset-window pair for identical requests. The plugin uses the majority response at startup and resamples only when the reported reset windows suddenly change.
 
 ## Install
 

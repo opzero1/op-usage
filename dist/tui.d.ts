@@ -5,6 +5,6 @@ type InstallOptions = {
     refreshIntervalMs?: number;
 };
 export declare function formatUsage(usage: CodexUsage): string;
-export declare function mergeUsage(current: CodexUsage, next: CodexUsage): CodexUsage;
+export declare function selectConsensusUsage(samples: CodexUsage[]): CodexUsage | undefined;
 export declare function installUsagePlugin(api: TuiPluginApi, options?: InstallOptions): Promise<void>;
 export {};
