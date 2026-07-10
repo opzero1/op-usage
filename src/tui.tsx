@@ -7,9 +7,17 @@ type InstallOptions = {
   refreshIntervalMs?: number;
 };
 
-export function formatUsage(usage: CodexUsage): string {
+function formatReset(resetsAt: number | undefined, now: number): string {
+  if (resetsAt === undefined) return "";
+  const minutes = Math.max(0, Math.ceil((resetsAt - now) / 60));
+  if (minutes === 0) return " (now)";
+  if (minutes < 60) return ` (${minutes}m)`;
+  return ` (${Math.floor(minutes / 60)}h ${minutes % 60}m)`;
+}
+
+export function formatUsage(usage: CodexUsage, now = Date.now() / 1000): string {
   const remaining = (used: number) => Math.round(Math.max(0, Math.min(100, 100 - used)));
-  return `5h ${remaining(usage.fiveHour.usedPercent)}% left · wk ${remaining(usage.weekly.usedPercent)}% left`;
+  return `5h ${remaining(usage.fiveHour.usedPercent)}% left${formatReset(usage.fiveHour.resetsAt, now)} · wk ${remaining(usage.weekly.usedPercent)}% left`;
 }
 
 function windowKey(usage: CodexUsage): string {
@@ -29,6 +37,7 @@ export function selectConsensusUsage(samples: CodexUsage[]): CodexUsage | undefi
 
 export async function installUsagePlugin(api: TuiPluginApi, options: InstallOptions = {}): Promise<void> {
   const [usage, setUsage] = createSignal<CodexUsage>();
+  const [now, setNow] = createSignal(Date.now() / 1000);
   const load = options.load ?? (() => loadCodexUsage({ cacheBuster: crypto.randomUUID() }));
   let disposed = false;
 
@@ -56,7 +65,7 @@ export async function installUsagePlugin(api: TuiPluginApi, options: InstallOpti
 
   const Usage = () => (
     <Show when={usage()} keyed>
-      {(value: CodexUsage) => <text fg={api.theme.current.textMuted}>{formatUsage(value)}</text>}
+      {(value: CodexUsage) => <text fg={api.theme.current.textMuted}>{formatUsage(value, now())}</text>}
     </Show>
   );
 
@@ -72,7 +81,10 @@ export async function installUsagePlugin(api: TuiPluginApi, options: InstallOpti
     },
   });
 
-  const timer = setInterval(() => void refresh(), options.refreshIntervalMs ?? 60_000);
+  const timer = setInterval(() => {
+    setNow(Date.now() / 1000);
+    void refresh();
+  }, options.refreshIntervalMs ?? 60_000);
   timer.unref?.();
   api.lifecycle.onDispose(() => {
     disposed = true;

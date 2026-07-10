@@ -5,10 +5,10 @@ An unobtrusive Codex usage monitor for OpenCode.
 `op-usage` reads the current Codex login from `$CODEX_HOME/auth.json` (or `~/.codex/auth.json`), fetches the same ChatGPT usage endpoint used by Codex, and shows both limits beside OpenCode's text input:
 
 ```text
-5h 100% left · wk 100% left
+5h 100% left (4h 12m) · wk 100% left
 ```
 
-The values are the percentage remaining in Codex's rolling 5-hour primary window and weekly secondary window, matching ChatGPT's usage page. They refresh once per minute. Missing auth hides the indicator; network, auth, and malformed-response errors keep the last good reading and never show a toast or interrupt the prompt.
+The values are the percentage remaining in Codex's rolling 5-hour primary window and weekly secondary window, matching ChatGPT's usage page. The parenthesized duration is the time until the 5-hour window resets. They refresh once per minute. Missing auth hides the indicator; network, auth, and malformed-response errors keep the last good reading and never show a toast or interrupt the prompt.
 
 The ChatGPT endpoint can occasionally return a different reset-window pair for identical requests. The plugin uses the majority response at startup and resamples only when the reported reset windows suddenly change.
 

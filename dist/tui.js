@@ -93,9 +93,19 @@ async function loadCodexUsage(options = {}) {
 }
 
 // src/tui.tsx
-function formatUsage(usage) {
+function formatReset(resetsAt, now) {
+  if (resetsAt === undefined)
+    return "";
+  const minutes = Math.max(0, Math.ceil((resetsAt - now) / 60));
+  if (minutes === 0)
+    return " (now)";
+  if (minutes < 60)
+    return ` (${minutes}m)`;
+  return ` (${Math.floor(minutes / 60)}h ${minutes % 60}m)`;
+}
+function formatUsage(usage, now = Date.now() / 1000) {
   const remaining = (used) => Math.round(Math.max(0, Math.min(100, 100 - used)));
-  return `5h ${remaining(usage.fiveHour.usedPercent)}% left \xB7 wk ${remaining(usage.weekly.usedPercent)}% left`;
+  return `5h ${remaining(usage.fiveHour.usedPercent)}% left${formatReset(usage.fiveHour.resetsAt, now)} \xB7 wk ${remaining(usage.weekly.usedPercent)}% left`;
 }
 function windowKey(usage) {
   const minute = (value) => value === undefined ? "?" : Math.floor(value / 60);
@@ -115,6 +125,7 @@ function selectConsensusUsage(samples) {
 }
 async function installUsagePlugin(api, options = {}) {
   const [usage, setUsage] = createSignal();
+  const [now, setNow] = createSignal(Date.now() / 1000);
   const load = options.load ?? (() => loadCodexUsage({
     cacheBuster: crypto.randomUUID()
   }));
@@ -147,7 +158,7 @@ async function installUsagePlugin(api, options = {}) {
     keyed: true,
     children: (value) => (() => {
       var _el$ = _$createElement("text");
-      _$insert(_el$, () => formatUsage(value));
+      _$insert(_el$, () => formatUsage(value, now()));
       _$effect((_$p) => _$setProp(_el$, "fg", api.theme.current.textMuted, _$p));
       return _el$;
     })()
@@ -163,7 +174,10 @@ async function installUsagePlugin(api, options = {}) {
       }
     }
   });
-  const timer = setInterval(() => void refresh(), options.refreshIntervalMs ?? 60000);
+  const timer = setInterval(() => {
+    setNow(Date.now() / 1000);
+    refresh();
+  }, options.refreshIntervalMs ?? 60000);
   timer.unref?.();
   api.lifecycle.onDispose(() => {
     disposed = true;

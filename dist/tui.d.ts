@@ -4,7 +4,7 @@ type InstallOptions = {
     load?: () => Promise<CodexUsage | undefined>;
     refreshIntervalMs?: number;
 };
-export declare function formatUsage(usage: CodexUsage): string;
+export declare function formatUsage(usage: CodexUsage, now?: number): string;
 export declare function selectConsensusUsage(samples: CodexUsage[]): CodexUsage | undefined;
 export declare function installUsagePlugin(api: TuiPluginApi, options?: InstallOptions): Promise<void>;
 export {};
