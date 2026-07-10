@@ -12,18 +12,22 @@ The values are the percentage used in Codex's rolling 5-hour primary window and 
 
 ## Install
 
-Add the package to the TUI plugin list in `~/.config/opencode/tui.json`:
+Clone the repository, then add its committed TUI bundle to the plugin list in `~/.config/opencode/tui.json`:
+
+```sh
+git clone https://github.com/opzero1/op-usage.git
+```
 
 ```json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["github:opzero1/op-usage#main"]
+  "plugin": ["file:///absolute/path/to/op-usage/dist/tui.js"]
 }
 ```
 
 Restart OpenCode after changing the config. TUI plugins are loaded only at startup.
 
-OpenCode installs the GitHub package into its plugin cache. This repository commits `dist/` because OpenCode intentionally disables dependency install scripts.
+This repository commits `dist/`, so the published checkout can load without a local build. The file URL uses OpenCode's supported path-plugin loader and avoids relying on unsupported Git package specifiers.
 
 ## Codex Compatibility
 
