@@ -2,7 +2,7 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
 import { testRender, type JSX } from "@opentui/solid";
 import { describe, expect, test } from "bun:test";
 import type { CodexUsage } from "../usage.js";
-import { formatUsage, installUsagePlugin } from "../tui.js";
+import { formatUsage, installUsagePlugin, mergeUsage } from "../tui.js";
 
 const usage: CodexUsage = {
   fiveHour: { usedPercent: 42.4 },
@@ -34,8 +34,22 @@ function harness() {
 type SlotRenderer = (context: unknown, props: unknown) => JSX.Element;
 
 describe("usage TUI plugin", () => {
-  test("formats both requested limits compactly", () => {
-    expect(formatUsage(usage)).toBe("5h 42% · wk 5%");
+  test("formats both limits as remaining usage to match ChatGPT", () => {
+    expect(formatUsage(usage)).toBe("5h 58% left · wk 95% left");
+  });
+
+  test("keeps the snapshot with the newest reset timestamps", () => {
+    const stale: CodexUsage = {
+      fiveHour: { usedPercent: 29, resetsAt: 100 },
+      weekly: { usedPercent: 15, resetsAt: 1_000 },
+    };
+    const current: CodexUsage = {
+      fiveHour: { usedPercent: 1, resetsAt: 200 },
+      weekly: { usedPercent: 0, resetsAt: 2_000 },
+    };
+
+    expect(mergeUsage(stale, current)).toEqual(current);
+    expect(mergeUsage(current, stale)).toEqual(current);
   });
 
   test("registers usage beside both prompt surfaces", async () => {
@@ -59,7 +73,7 @@ describe("usage TUI plugin", () => {
     const app = await testRender(() => slot?.({}, { session_id: "s1" }), { width: 40, height: 2 });
     try {
       await app.renderOnce();
-      expect(app.captureCharFrame()).toContain("5h 42% · wk 5%");
+      expect(app.captureCharFrame()).toContain("5h 58% left · wk 95% left");
     } finally {
       app.renderer.destroy();
       await h.disposals[0]?.();

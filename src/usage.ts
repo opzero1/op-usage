@@ -22,6 +22,7 @@ type CodexAuth = {
 
 type LoadUsageOptions = {
   authFile?: string;
+  cacheBuster?: string;
   endpoint?: string;
   fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
   signal?: AbortSignal;
@@ -101,7 +102,10 @@ export async function loadCodexUsage(options: LoadUsageOptions = {}): Promise<Co
   if (auth.accountID) headers["ChatGPT-Account-Id"] = auth.accountID;
   if (auth.fedramp) headers["X-OpenAI-Fedramp"] = "true";
 
-  const response = await (options.fetch ?? globalThis.fetch)(options.endpoint ?? CODEX_USAGE_URL, {
+  const endpoint = new URL(options.endpoint ?? CODEX_USAGE_URL);
+  if (options.cacheBuster) endpoint.searchParams.set("_", options.cacheBuster);
+
+  const response = await (options.fetch ?? globalThis.fetch)(endpoint, {
     headers,
     signal: options.signal ?? AbortSignal.timeout(10_000),
   });

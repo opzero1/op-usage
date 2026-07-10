@@ -8,22 +8,44 @@ type InstallOptions = {
 };
 
 export function formatUsage(usage: CodexUsage): string {
-  return `5h ${Math.round(usage.fiveHour.usedPercent)}% · wk ${Math.round(usage.weekly.usedPercent)}%`;
+  const remaining = (used: number) => Math.round(Math.max(0, Math.min(100, 100 - used)));
+  return `5h ${remaining(usage.fiveHour.usedPercent)}% left · wk ${remaining(usage.weekly.usedPercent)}% left`;
+}
+
+function newestWindow(current: CodexUsage["fiveHour"], next: CodexUsage["fiveHour"]) {
+  if (current.resetsAt !== undefined && next.resetsAt !== undefined && next.resetsAt < current.resetsAt) return current;
+  return next;
+}
+
+export function mergeUsage(current: CodexUsage, next: CodexUsage): CodexUsage {
+  return {
+    fiveHour: newestWindow(current.fiveHour, next.fiveHour),
+    weekly: newestWindow(current.weekly, next.weekly),
+  };
 }
 
 export async function installUsagePlugin(api: TuiPluginApi, options: InstallOptions = {}): Promise<void> {
   const [usage, setUsage] = createSignal<CodexUsage>();
-  const load = options.load ?? loadCodexUsage;
+  const load = options.load ?? (() => loadCodexUsage({ cacheBuster: crypto.randomUUID() }));
   let disposed = false;
 
-  const refresh = async () => {
-    try {
-      const next = await load();
-      if (!disposed) setUsage(next);
-    } catch {
-      // Usage monitoring is optional. Keep the last good reading and never
-      // interrupt normal OpenCode use for an auth or network failure.
+  const refresh = async (sampleLimit = 1) => {
+    let next: CodexUsage | undefined;
+    let unavailable = false;
+    const results = await Promise.allSettled(Array.from({ length: sampleLimit }, () => load()));
+
+    for (const result of results) {
+      if (result.status === "rejected") continue;
+      if (!result.value) {
+        unavailable = true;
+        continue;
+      }
+      next = next ? mergeUsage(next, result.value) : result.value;
     }
+
+    if (disposed) return;
+    if (next) setUsage((current) => (current ? mergeUsage(current, next) : next));
+    else if (unavailable) setUsage(undefined);
   };
 
   const Usage = () => (
@@ -51,5 +73,7 @@ export async function installUsagePlugin(api: TuiPluginApi, options: InstallOpti
     clearInterval(timer);
   });
 
-  void refresh();
+  // The upstream endpoint can alternate between an older and newer reset
+  // window. Sample at startup, then retain the one with later resets.
+  void refresh(options.load ? 1 : 10);
 }

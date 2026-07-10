@@ -9,6 +9,7 @@ export type CodexUsage = {
 };
 type LoadUsageOptions = {
     authFile?: string;
+    cacheBuster?: string;
     endpoint?: string;
     fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
     signal?: AbortSignal;

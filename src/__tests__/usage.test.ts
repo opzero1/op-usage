@@ -46,6 +46,24 @@ describe("Codex usage", () => {
     });
   });
 
+  test("can bypass inconsistent upstream caches without changing the usage path", async () => {
+    const root = await mkdtemp(join(tmpdir(), "op-usage-"));
+    const authFile = join(root, "auth.json");
+    await writeFile(authFile, JSON.stringify({ tokens: { access_token: "secret", account_id: "account-1" } }));
+    let requested = "";
+
+    await loadCodexUsage({
+      authFile,
+      cacheBuster: "sample-1",
+      fetch: async (url) => {
+        requested = String(url);
+        return Response.json(response);
+      },
+    });
+
+    expect(requested).toBe("https://chatgpt.com/backend-api/wham/usage?_=sample-1");
+  });
+
   test("falls back to the account and FedRAMP claims in the ID token", async () => {
     const root = await mkdtemp(join(tmpdir(), "op-usage-"));
     const authFile = join(root, "auth.json");

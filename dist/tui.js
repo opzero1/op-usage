@@ -77,7 +77,10 @@ async function loadCodexUsage(options = {}) {
     headers["ChatGPT-Account-Id"] = auth.accountID;
   if (auth.fedramp)
     headers["X-OpenAI-Fedramp"] = "true";
-  const response = await (options.fetch ?? globalThis.fetch)(options.endpoint ?? CODEX_USAGE_URL, {
+  const endpoint = new URL(options.endpoint ?? CODEX_USAGE_URL);
+  if (options.cacheBuster)
+    endpoint.searchParams.set("_", options.cacheBuster);
+  const response = await (options.fetch ?? globalThis.fetch)(endpoint, {
     headers,
     signal: options.signal ?? AbortSignal.timeout(1e4)
   });
@@ -91,18 +94,47 @@ async function loadCodexUsage(options = {}) {
 
 // src/tui.tsx
 function formatUsage(usage) {
-  return `5h ${Math.round(usage.fiveHour.usedPercent)}% \xB7 wk ${Math.round(usage.weekly.usedPercent)}%`;
+  const remaining = (used) => Math.round(Math.max(0, Math.min(100, 100 - used)));
+  return `5h ${remaining(usage.fiveHour.usedPercent)}% left \xB7 wk ${remaining(usage.weekly.usedPercent)}% left`;
+}
+function newestWindow(current, next) {
+  if (current.resetsAt !== undefined && next.resetsAt !== undefined && next.resetsAt < current.resetsAt)
+    return current;
+  return next;
+}
+function mergeUsage(current, next) {
+  return {
+    fiveHour: newestWindow(current.fiveHour, next.fiveHour),
+    weekly: newestWindow(current.weekly, next.weekly)
+  };
 }
 async function installUsagePlugin(api, options = {}) {
   const [usage, setUsage] = createSignal();
-  const load = options.load ?? loadCodexUsage;
+  const load = options.load ?? (() => loadCodexUsage({
+    cacheBuster: crypto.randomUUID()
+  }));
   let disposed = false;
-  const refresh = async () => {
-    try {
-      const next = await load();
-      if (!disposed)
-        setUsage(next);
-    } catch {}
+  const refresh = async (sampleLimit = 1) => {
+    let next;
+    let unavailable = false;
+    const results = await Promise.allSettled(Array.from({
+      length: sampleLimit
+    }, () => load()));
+    for (const result of results) {
+      if (result.status === "rejected")
+        continue;
+      if (!result.value) {
+        unavailable = true;
+        continue;
+      }
+      next = next ? mergeUsage(next, result.value) : result.value;
+    }
+    if (disposed)
+      return;
+    if (next)
+      setUsage((current) => current ? mergeUsage(current, next) : next);
+    else if (unavailable)
+      setUsage(undefined);
   };
   const Usage = () => _$createComponent(Show, {
     get when() {
@@ -133,7 +165,7 @@ async function installUsagePlugin(api, options = {}) {
     disposed = true;
     clearInterval(timer);
   });
-  refresh();
+  refresh(options.load ? 1 : 10);
 }
 
 // src/tui.entry.ts
