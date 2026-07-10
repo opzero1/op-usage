@@ -107,4 +107,26 @@ describe("Codex usage", () => {
     expect(usage).toBeUndefined();
     expect(requested).toBe(false);
   });
+
+  test("cancels an in-flight request when the plugin lifecycle aborts", async () => {
+    const root = await mkdtemp(join(tmpdir(), "op-usage-"));
+    const authFile = join(root, "auth.json");
+    await writeFile(authFile, JSON.stringify({ tokens: { access_token: "secret", account_id: "account-1" } }));
+    const controller = new AbortController();
+
+    const request = loadCodexUsage({
+      authFile,
+      signal: controller.signal,
+      fetch: async (_url, init) =>
+        await new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (!signal) return reject(new Error("missing signal"));
+          if (signal.aborted) return reject(signal.reason);
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+    });
+    controller.abort(new Error("plugin disposed"));
+
+    await expect(request).rejects.toThrow("plugin disposed");
+  });
 });

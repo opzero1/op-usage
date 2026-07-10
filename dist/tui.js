@@ -80,9 +80,10 @@ async function loadCodexUsage(options = {}) {
   const endpoint = new URL(options.endpoint ?? CODEX_USAGE_URL);
   if (options.cacheBuster)
     endpoint.searchParams.set("_", options.cacheBuster);
+  const timeout = AbortSignal.timeout(1e4);
   const response = await (options.fetch ?? globalThis.fetch)(endpoint, {
     headers,
-    signal: options.signal ?? AbortSignal.timeout(1e4)
+    signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
   });
   if (!response.ok)
     throw new Error(`Codex usage request failed with HTTP ${response.status}`);
@@ -127,7 +128,8 @@ async function installUsagePlugin(api, options = {}) {
   const [usage, setUsage] = createSignal();
   const [now, setNow] = createSignal(Date.now() / 1000);
   const load = options.load ?? (() => loadCodexUsage({
-    cacheBuster: crypto.randomUUID()
+    cacheBuster: crypto.randomUUID(),
+    signal: api.lifecycle.signal
   }));
   let disposed = false;
   const sample = async (count) => {

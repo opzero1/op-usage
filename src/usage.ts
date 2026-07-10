@@ -104,10 +104,11 @@ export async function loadCodexUsage(options: LoadUsageOptions = {}): Promise<Co
 
   const endpoint = new URL(options.endpoint ?? CODEX_USAGE_URL);
   if (options.cacheBuster) endpoint.searchParams.set("_", options.cacheBuster);
+  const timeout = AbortSignal.timeout(10_000);
 
   const response = await (options.fetch ?? globalThis.fetch)(endpoint, {
     headers,
-    signal: options.signal ?? AbortSignal.timeout(10_000),
+    signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout,
   });
   if (!response.ok) throw new Error(`Codex usage request failed with HTTP ${response.status}`);
 

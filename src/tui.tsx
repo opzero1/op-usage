@@ -38,7 +38,9 @@ export function selectConsensusUsage(samples: CodexUsage[]): CodexUsage | undefi
 export async function installUsagePlugin(api: TuiPluginApi, options: InstallOptions = {}): Promise<void> {
   const [usage, setUsage] = createSignal<CodexUsage>();
   const [now, setNow] = createSignal(Date.now() / 1000);
-  const load = options.load ?? (() => loadCodexUsage({ cacheBuster: crypto.randomUUID() }));
+  const load =
+    options.load ??
+    (() => loadCodexUsage({ cacheBuster: crypto.randomUUID(), signal: api.lifecycle.signal }));
   let disposed = false;
 
   const sample = async (count: number) => {
