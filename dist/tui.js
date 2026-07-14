@@ -20,17 +20,29 @@ function window(value) {
   if (!input || typeof input.used_percent !== "number" || !Number.isFinite(input.used_percent))
     return;
   return {
-    usedPercent: input.used_percent,
-    resetsAt: typeof input.reset_at === "number" && Number.isFinite(input.reset_at) ? input.reset_at : undefined
+    duration: typeof input.limit_window_seconds === "number" && Number.isFinite(input.limit_window_seconds) ? input.limit_window_seconds : undefined,
+    usage: {
+      usedPercent: input.used_percent,
+      resetsAt: typeof input.reset_at === "number" && Number.isFinite(input.reset_at) ? input.reset_at : undefined
+    }
   };
 }
 function parseCodexUsage(value) {
   const rateLimit = record(record(value)?.rate_limit);
-  const fiveHour = window(rateLimit?.primary_window);
-  const weekly = window(rateLimit?.secondary_window);
-  if (!fiveHour || !weekly)
+  const primary = window(rateLimit?.primary_window);
+  const secondary = window(rateLimit?.secondary_window);
+  const windows = [primary, secondary].filter((item) => item !== undefined);
+  if (!windows.length)
     return;
-  return { fiveHour, weekly };
+  const legacyOrder = windows.length === 2 && windows.every((item) => item.duration === undefined);
+  const fiveHour = windows.find((item) => item.duration === 5 * 60 * 60)?.usage ?? (legacyOrder ? primary?.usage : undefined);
+  const weekly = windows.find((item) => item.duration === 7 * 24 * 60 * 60)?.usage ?? (legacyOrder ? secondary?.usage : undefined);
+  if (!fiveHour && !weekly)
+    return;
+  return {
+    ...fiveHour ? { fiveHour } : {},
+    ...weekly ? { weekly } : {}
+  };
 }
 function codexAuthFile(env = process.env) {
   const root = env.CODEX_HOME || join(homedir(), ".codex");
@@ -89,7 +101,7 @@ async function loadCodexUsage(options = {}) {
     throw new Error(`Codex usage request failed with HTTP ${response.status}`);
   const usage = parseCodexUsage(await response.json());
   if (!usage)
-    throw new Error("Codex usage response did not contain both rate-limit windows");
+    throw new Error("Codex usage response did not contain a supported rate-limit window");
   return usage;
 }
 
@@ -106,11 +118,11 @@ function formatReset(resetsAt, now) {
 }
 function formatUsage(usage, now = Date.now() / 1000) {
   const remaining = (used) => Math.round(Math.max(0, Math.min(100, 100 - used)));
-  return `5h ${remaining(usage.fiveHour.usedPercent)}% left${formatReset(usage.fiveHour.resetsAt, now)} \xB7 wk ${remaining(usage.weekly.usedPercent)}% left`;
+  return [usage.fiveHour && `5h ${remaining(usage.fiveHour.usedPercent)}% left${formatReset(usage.fiveHour.resetsAt, now)}`, usage.weekly && `wk ${remaining(usage.weekly.usedPercent)}% left`].filter((value) => Boolean(value)).join(" \xB7 ");
 }
 function windowKey(usage) {
   const minute = (value) => value === undefined ? "?" : Math.floor(value / 60);
-  return `${minute(usage.fiveHour.resetsAt)}/${minute(usage.weekly.resetsAt)}`;
+  return `${minute(usage.fiveHour?.resetsAt)}/${minute(usage.weekly?.resetsAt)}`;
 }
 function selectConsensusUsage(samples) {
   const groups = new Map;

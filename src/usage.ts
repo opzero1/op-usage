@@ -10,8 +10,13 @@ export type UsageWindow = {
 };
 
 export type CodexUsage = {
-  fiveHour: UsageWindow;
-  weekly: UsageWindow;
+  fiveHour?: UsageWindow;
+  weekly?: UsageWindow;
+};
+
+type ParsedUsageWindow = {
+  duration?: number;
+  usage: UsageWindow;
 };
 
 type CodexAuth = {
@@ -34,22 +39,39 @@ function record(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function window(value: unknown): UsageWindow | undefined {
+function window(value: unknown): ParsedUsageWindow | undefined {
   const input = record(value);
   if (!input || typeof input.used_percent !== "number" || !Number.isFinite(input.used_percent)) return;
 
   return {
-    usedPercent: input.used_percent,
-    resetsAt: typeof input.reset_at === "number" && Number.isFinite(input.reset_at) ? input.reset_at : undefined,
+    duration:
+      typeof input.limit_window_seconds === "number" && Number.isFinite(input.limit_window_seconds)
+        ? input.limit_window_seconds
+        : undefined,
+    usage: {
+      usedPercent: input.used_percent,
+      resetsAt: typeof input.reset_at === "number" && Number.isFinite(input.reset_at) ? input.reset_at : undefined,
+    },
   };
 }
 
 export function parseCodexUsage(value: unknown): CodexUsage | undefined {
   const rateLimit = record(record(value)?.rate_limit);
-  const fiveHour = window(rateLimit?.primary_window);
-  const weekly = window(rateLimit?.secondary_window);
-  if (!fiveHour || !weekly) return;
-  return { fiveHour, weekly };
+  const primary = window(rateLimit?.primary_window);
+  const secondary = window(rateLimit?.secondary_window);
+  const windows = [primary, secondary].filter((item): item is ParsedUsageWindow => item !== undefined);
+  if (!windows.length) return;
+
+  const legacyOrder = windows.length === 2 && windows.every((item) => item.duration === undefined);
+  const fiveHour = windows.find((item) => item.duration === 5 * 60 * 60)?.usage ??
+    (legacyOrder ? primary?.usage : undefined);
+  const weekly = windows.find((item) => item.duration === 7 * 24 * 60 * 60)?.usage ??
+    (legacyOrder ? secondary?.usage : undefined);
+  if (!fiveHour && !weekly) return;
+  return {
+    ...(fiveHour ? { fiveHour } : {}),
+    ...(weekly ? { weekly } : {}),
+  };
 }
 
 export function codexAuthFile(env: NodeJS.ProcessEnv = process.env): string {
@@ -113,6 +135,6 @@ export async function loadCodexUsage(options: LoadUsageOptions = {}): Promise<Co
   if (!response.ok) throw new Error(`Codex usage request failed with HTTP ${response.status}`);
 
   const usage = parseCodexUsage(await response.json());
-  if (!usage) throw new Error("Codex usage response did not contain both rate-limit windows");
+  if (!usage) throw new Error("Codex usage response did not contain a supported rate-limit window");
   return usage;
 }

@@ -4,8 +4,8 @@ export type UsageWindow = {
     resetsAt?: number;
 };
 export type CodexUsage = {
-    fiveHour: UsageWindow;
-    weekly: UsageWindow;
+    fiveHour?: UsageWindow;
+    weekly?: UsageWindow;
 };
 type LoadUsageOptions = {
     authFile?: string;

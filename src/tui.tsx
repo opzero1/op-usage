@@ -17,12 +17,18 @@ function formatReset(resetsAt: number | undefined, now: number): string {
 
 export function formatUsage(usage: CodexUsage, now = Date.now() / 1000): string {
   const remaining = (used: number) => Math.round(Math.max(0, Math.min(100, 100 - used)));
-  return `5h ${remaining(usage.fiveHour.usedPercent)}% left${formatReset(usage.fiveHour.resetsAt, now)} · wk ${remaining(usage.weekly.usedPercent)}% left`;
+  return [
+    usage.fiveHour &&
+      `5h ${remaining(usage.fiveHour.usedPercent)}% left${formatReset(usage.fiveHour.resetsAt, now)}`,
+    usage.weekly && `wk ${remaining(usage.weekly.usedPercent)}% left`,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(" · ");
 }
 
 function windowKey(usage: CodexUsage): string {
   const minute = (value?: number) => (value === undefined ? "?" : Math.floor(value / 60));
-  return `${minute(usage.fiveHour.resetsAt)}/${minute(usage.weekly.resetsAt)}`;
+  return `${minute(usage.fiveHour?.resetsAt)}/${minute(usage.weekly?.resetsAt)}`;
 }
 
 export function selectConsensusUsage(samples: CodexUsage[]): CodexUsage | undefined {

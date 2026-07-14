@@ -42,6 +42,10 @@ describe("usage TUI plugin", () => {
     expect(formatUsage(usage, 100)).toBe("5h 58% left (3h 0m) · wk 95% left");
   });
 
+  test("formats a weekly-only limit instead of hiding the usage display", () => {
+    expect(formatUsage({ weekly: { usedPercent: 8, resetsAt: 1_784_529_832 } })).toBe("wk 92% left");
+  });
+
   test("selects the majority reset window instead of earlier or later timestamps", () => {
     const website: CodexUsage = {
       fiveHour: { usedPercent: 37, resetsAt: 1_783_693_896 },

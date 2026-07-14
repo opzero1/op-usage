@@ -19,8 +19,25 @@ describe("Codex usage", () => {
     });
   });
 
-  test("rejects responses missing either limit window", () => {
-    expect(parseCodexUsage({ rate_limit: { primary_window: response.rate_limit.primary_window } })).toBeUndefined();
+  test("maps a single weekly primary window used by plans without a five-hour limit", () => {
+    expect(
+      parseCodexUsage({
+        rate_limit: {
+          primary_window: {
+            used_percent: 8,
+            limit_window_seconds: 604_800,
+            reset_at: 1_784_529_832,
+          },
+          secondary_window: null,
+        },
+      }),
+    ).toEqual({
+      weekly: { usedPercent: 8, resetsAt: 1_784_529_832 },
+    });
+  });
+
+  test("rejects responses without a supported limit window", () => {
+    expect(parseCodexUsage({ rate_limit: { primary_window: null } })).toBeUndefined();
   });
 
   test("uses Codex auth for the ChatGPT usage request", async () => {
@@ -38,7 +55,7 @@ describe("Codex usage", () => {
       },
     });
 
-    expect(usage?.fiveHour.usedPercent).toBe(42);
+    expect(usage?.fiveHour?.usedPercent).toBe(42);
     expect(requests[0]?.url).toBe("https://example.test/wham/usage");
     expect(requests[0]?.init?.headers).toEqual({
       Authorization: "Bearer secret",
